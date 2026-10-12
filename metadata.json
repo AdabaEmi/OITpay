@@ -1,0 +1,6 @@
+{
+  "name": "OITpay - Course Registration & Payment Portal",
+  "description": "Official course registration and secure payment portal for Othello Institute of Technology. Fast, secure, and easy enrollment powered by Paystack.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
