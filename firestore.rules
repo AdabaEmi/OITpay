@@ -1,0 +1,170 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 6 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-@.]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email == 'oguntoyebidemisunkanmi@gmail.com' &&
+        request.auth.token.email_verified == true;
+    }
+
+    function isValidCourseRegistration(data) {
+      return data.keys().hasAll([
+        'reference',
+        'idempotencyKey',
+        'fullName',
+        'email',
+        'phone',
+        'gender',
+        'courseId',
+        'courseName',
+        'courseCategory',
+        'durationLabel',
+        'registrationFee',
+        'courseFee',
+        'totalAmount',
+        'status',
+        'paymentChannel',
+        'emailNotified',
+        'whatsappRedirectUrl',
+        'createdAtIso',
+        'paidAtIso'
+      ]) &&
+      data.keys().hasOnly([
+        'reference',
+        'idempotencyKey',
+        'fullName',
+        'email',
+        'phone',
+        'gender',
+        'courseId',
+        'courseName',
+        'courseCategory',
+        'durationLabel',
+        'registrationFee',
+        'courseFee',
+        'totalAmount',
+        'status',
+        'paymentChannel',
+        'emailNotified',
+        'whatsappRedirectUrl',
+        'createdAtIso',
+        'paidAtIso'
+      ]) &&
+      isValidId(data.reference) &&
+      isValidId(data.idempotencyKey) &&
+      data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 120 &&
+      data.email is string && data.email.size() >= 5 && data.email.size() <= 160 &&
+      data.phone is string && data.phone.size() >= 7 && data.phone.size() <= 30 &&
+      (data.gender == 'Male' || data.gender == 'Female') &&
+      isValidId(data.courseId) &&
+      data.courseName is string && data.courseName.size() >= 2 && data.courseName.size() <= 140 &&
+      data.courseCategory is string && data.courseCategory.size() >= 2 && data.courseCategory.size() <= 100 &&
+      data.durationLabel is string && data.durationLabel.size() >= 2 && data.durationLabel.size() <= 80 &&
+      data.registrationFee is number && data.registrationFee >= 5000 && data.registrationFee <= 1000000 &&
+      data.courseFee is number && data.courseFee >= 10000 && data.courseFee <= 5000000 &&
+      data.totalAmount is number && data.totalAmount == data.registrationFee + data.courseFee &&
+      (data.status == 'PENDING' || data.status == 'PAID' || data.status == 'FAILED') &&
+      data.paymentChannel is string && data.paymentChannel.size() <= 64 &&
+      data.emailNotified is bool &&
+      data.whatsappRedirectUrl is string && data.whatsappRedirectUrl.size() >= 10 && data.whatsappRedirectUrl.size() <= 2000 &&
+      data.createdAtIso is string && data.createdAtIso.size() >= 10 && data.createdAtIso.size() <= 40 &&
+      data.paidAtIso is string && data.paidAtIso.size() <= 40;
+    }
+
+    function isValidIdempotencyLock(data) {
+      return data.keys().hasAll([
+        'idempotencyKey',
+        'reference',
+        'status',
+        'authorizationUrl',
+        'createdAtIso'
+      ]) &&
+      data.keys().hasOnly([
+        'idempotencyKey',
+        'reference',
+        'status',
+        'authorizationUrl',
+        'createdAtIso'
+      ]) &&
+      isValidId(data.idempotencyKey) &&
+      isValidId(data.reference) &&
+      (data.status == 'PENDING' || data.status == 'PAID') &&
+      data.authorizationUrl is string && data.authorizationUrl.size() >= 8 && data.authorizationUrl.size() <= 1000 &&
+      data.createdAtIso is string && data.createdAtIso.size() >= 10 && data.createdAtIso.size() <= 40;
+    }
+
+    // Course Registrations Collection
+    match /registrations/{reference} {
+      // Single-document lookup by unguessable cryptographic reference ID or verified Admin
+      allow get: if isValidId(reference);
+      // Prevent public list scraping of student PII; only bootstrapped verified admin can list
+      allow list: if isBootstrappedAdmin();
+
+      // Create: Must start as PENDING (or PAID if server-verified immediately) with strict schema validation
+      allow create: if isValidId(reference) &&
+        isValidCourseRegistration(incoming()) &&
+        incoming().reference == reference;
+
+      // Update: Terminal state locking — once status is PAID and emailNotified is true, no further writes allowed except by Admin
+      allow update: if isValidId(reference) &&
+        isValidCourseRegistration(incoming()) &&
+        incoming().reference == existing().reference &&
+        incoming().idempotencyKey == existing().idempotencyKey &&
+        incoming().email == existing().email &&
+        incoming().courseId == existing().courseId &&
+        incoming().totalAmount == existing().totalAmount &&
+        incoming().createdAtIso == existing().createdAtIso &&
+        (
+          isBootstrappedAdmin() ||
+          (
+            // Action: Mark Paid & Email Notified (only when not already both PAID and emailNotified)
+            !(existing().status == 'PAID' && existing().emailNotified == true) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'paymentChannel', 'emailNotified', 'paidAtIso', 'whatsappRedirectUrl'])
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // Atomic Idempotency Locks Collection
+    match /idempotency_locks/{idempotencyKey} {
+      allow get: if isValidId(idempotencyKey);
+      allow list: if false;
+
+      allow create: if isValidId(idempotencyKey) &&
+        isValidIdempotencyLock(incoming()) &&
+        incoming().idempotencyKey == idempotencyKey;
+
+      allow update: if isValidId(idempotencyKey) &&
+        isValidIdempotencyLock(incoming()) &&
+        incoming().idempotencyKey == existing().idempotencyKey &&
+        incoming().reference == existing().reference &&
+        incoming().createdAtIso == existing().createdAtIso &&
+        existing().status != 'PAID' &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'authorizationUrl']);
+
+      allow delete: if false;
+    }
+  }
+}

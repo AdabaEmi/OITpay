@@ -1,0 +1,194 @@
+{
+  "entities": {
+    "CourseRegistration": {
+      "title": "CourseRegistration",
+      "description": "Stores a student's course registration, payment status, idempotency lock, and email notification state.",
+      "type": "object",
+      "properties": {
+        "reference": {
+          "type": "string",
+          "description": "Unique Paystack transaction reference and Firestore document ID.",
+          "minLength": 6,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Deterministic idempotency key preventing duplicate payment initialization for the same registration.",
+          "minLength": 8,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Student's full name.",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Student's email address.",
+          "minLength": 5,
+          "maxLength": 160
+        },
+        "phone": {
+          "type": "string",
+          "description": "Student's phone number.",
+          "minLength": 7,
+          "maxLength": 30
+        },
+        "gender": {
+          "type": "string",
+          "enum": ["Male", "Female"],
+          "description": "Student's gender selection."
+        },
+        "courseId": {
+          "type": "string",
+          "description": "Selected course ID.",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "courseName": {
+          "type": "string",
+          "description": "Selected course display title.",
+          "minLength": 2,
+          "maxLength": 140
+        },
+        "courseCategory": {
+          "type": "string",
+          "description": "Course category name.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "durationLabel": {
+          "type": "string",
+          "description": "Selected course learning duration.",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "registrationFee": {
+          "type": "number",
+          "description": "Registration fee in NGN."
+        },
+        "courseFee": {
+          "type": "number",
+          "description": "Tuition fee in NGN."
+        },
+        "totalAmount": {
+          "type": "number",
+          "description": "Total amount paid in NGN (registrationFee + courseFee)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "PAID", "FAILED"],
+          "description": "Payment verification status."
+        },
+        "paymentChannel": {
+          "type": "string",
+          "description": "Payment channel reported by Paystack (card, bank_transfer, ussd, etc.).",
+          "maxLength": 64
+        },
+        "emailNotified": {
+          "type": "boolean",
+          "description": "True once Brevo Admin and Student Receipt emails have been dispatched."
+        },
+        "whatsappRedirectUrl": {
+          "type": "string",
+          "description": "Pre-populated Othello Admin WhatsApp URL for this registration.",
+          "minLength": 10,
+          "maxLength": 2000
+        },
+        "createdAtIso": {
+          "type": "string",
+          "description": "ISO timestamp when registration was initialized.",
+          "minLength": 10,
+          "maxLength": 40
+        },
+        "paidAtIso": {
+          "type": "string",
+          "description": "ISO timestamp when payment was verified.",
+          "minLength": 0,
+          "maxLength": 40
+        }
+      },
+      "required": [
+        "reference",
+        "idempotencyKey",
+        "fullName",
+        "email",
+        "phone",
+        "gender",
+        "courseId",
+        "courseName",
+        "courseCategory",
+        "durationLabel",
+        "registrationFee",
+        "courseFee",
+        "totalAmount",
+        "status",
+        "paymentChannel",
+        "emailNotified",
+        "whatsappRedirectUrl",
+        "createdAtIso",
+        "paidAtIso"
+      ]
+    },
+    "IdempotencyLock": {
+      "title": "IdempotencyLock",
+      "description": "Maps a deterministic idempotency key to a registration reference to prevent duplicate payment creation.",
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Deterministic idempotency key.",
+          "minLength": 8,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "reference": {
+          "type": "string",
+          "description": "Associated Paystack transaction reference.",
+          "minLength": 6,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "PAID"],
+          "description": "Current status of the locked registration."
+        },
+        "authorizationUrl": {
+          "type": "string",
+          "description": "Cached Paystack authorization URL for safe retry.",
+          "minLength": 8,
+          "maxLength": 1000
+        },
+        "createdAtIso": {
+          "type": "string",
+          "description": "ISO timestamp when lock was acquired.",
+          "minLength": 10,
+          "maxLength": 40
+        }
+      },
+      "required": [
+        "idempotencyKey",
+        "reference",
+        "status",
+        "authorizationUrl",
+        "createdAtIso"
+      ]
+    }
+  },
+  "firestore": {
+    "/registrations/{reference}": {
+      "schema": { "$ref": "#/entities/CourseRegistration" },
+      "description": "Primary collection of student course registrations and verified payment statuses."
+    },
+    "/idempotency_locks/{idempotencyKey}": {
+      "schema": { "$ref": "#/entities/IdempotencyLock" },
+      "description": "Atomic idempotency locks preventing duplicate transactions."
+    }
+  }
+}
