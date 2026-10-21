@@ -28,7 +28,7 @@ export const COURSES: CourseItem[] = [
     category: 'Data & Analytics',
     registrationFee: 10000,
     durations: [
-      { label: '4 Months (16 Weeks)', months: 4, courseFee: 50000 },
+      { label: '3 Months (10 Weeks)', months: 3, courseFee: 50000 },
     ],
   },
   {
